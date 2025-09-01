@@ -1,325 +1,311 @@
-# Backend with Prisma
+# Chat Room API - Starlette ASGI Application
 
-This backend uses Prisma ORM with PostgreSQL for the chatroom application, including real-time PostgreSQL listeners for message changes, a modular route structure, and JWT authentication.
-
-## Project Structure
-
-```
-backend/
-├── app.js                 # Main application entry point
-├── routes/                # Route modules
-│   ├── index.js          # Main router that combines all routes
-│   ├── health.js         # Health check endpoints
-│   ├── test.js           # Testing endpoints
-│   ├── messages.js       # Message CRUD operations
-│   └── users.js          # User management operations
-├── services/              # Business logic services
-│   └── postgresListener.js # PostgreSQL listener service
-├── middleware/            # Express middleware
-│   └── errorHandler.js   # Error handling middleware
-├── utils/                 # Utility functions
-│   └── auth.js           # JWT authentication utilities
-├── examples/              # Usage examples
-│   └── messageOperations.js
-└── prisma/               # Database schema and migrations
-    └── schema.prisma
-```
-
-## Environment Variables
-
-Create a `.env` file in the backend directory with:
-
-```env
-# Database connection
-DATABASE_URL="postgresql://username:password@localhost:5432/chatroom_db?schema=public"
-
-# JWT Authentication
-AUTH_SECRET_KEY="your-super-secret-jwt-key-here"
-```
-
-## JWT Authentication
-
-The application uses JWT (JSON Web Tokens) for secure authentication and authorization.
-
-### Features
-
-- **Secure Token Generation**: Uses environment variable `AUTH_SECRET_KEY` for signing
-- **Token Expiration**: Default 24-hour expiration with automatic refresh
-- **Multiple Token Sources**: Supports Authorization header, x-auth-token header, and query parameters
-- **Role-Based Access Control**: Extensible permission system
-- **Ownership Verification**: Ensures users can only access their own resources
-- **Automatic Token Refresh**: Refreshes tokens before expiration
-
-### Token Format
-
-```json
-{
-  "uuid": "user-uuid",
-  "name": "User Name",
-  "iat": 1704067200,
-  "exp": 1704153600,
-  "iss": "chatroom-backend",
-  "aud": "chatroom-users"
-}
-```
-
-### Authentication Headers
-
-```bash
-# Bearer token (recommended)
-Authorization: Bearer <jwt-token>
-
-# Custom header
-x-auth-token: <jwt-token>
-
-# Query parameter
-GET /api/users?token=<jwt-token>
-```
-
-## Database Schema
-
-### Tables
-
-1. **users** - User information
-   - `uuid` (UUID, Primary Key)
-   - `name` (VARCHAR(25))
-   - `created_date` (DATETIME)
-   - `updated_at` (DATETIME)
-
-2. **groups** - Chat groups
-   - `uuid` (UUID, Primary Key)
-   - `created_date` (DATETIME)
-   - `updated_at` (DATETIME)
-
-3. **messages** - Chat messages
-   - `id` (INT, Primary Key, Auto Increment)
-   - `group_uuid` (UUID, Foreign Key to groups.uuid)
-   - `content` (TEXT - supports emoticons and Unicode)
-   - `file` (VARCHAR(255), optional)
-   - `created_date` (DATETIME)
-   - `updated_at` (DATETIME)
-   - `is_deleted` (BOOLEAN)
-   - `sender_uuid` (UUID, Foreign Key to users.uuid)
-
-4. **group_participants** - Group membership
-   - `id` (INT, Primary Key, Auto Increment)
-   - `group_uuid` (UUID, Foreign Key to groups.uuid)
-   - `user_uuid` (UUID, Foreign Key to users.uuid)
-   - `joined_at` (DATETIME)
-
-## API Endpoints
-
-### Base URL: `/api`
-
-#### Health & Status
-- `GET /api/health` - Basic health check
-- `GET /api/health/detailed` - Detailed system health information
-
-#### Testing
-- `POST /api/test/notification` - Test PostgreSQL listener
-- `GET /api/test/listener-status` - Check listener status
-- `POST /api/test/simulate-message` - Create test message
-- `GET /api/test/auth-test` - Test JWT authentication (Auth Required)
-- `POST /api/test/generate-test-token` - Generate test JWT token
-
-#### Users
-- `POST /api/users` - Create new user (Public)
-- `POST /api/users/login` - Login with username (Public)
-- `GET /api/users` - Get all users (Auth Required)
-- `GET /api/users/:uuid` - Get specific user with details (Auth Required)
-- `PUT /api/users/:uuid` - Update user (Auth + Ownership Required)
-- `DELETE /api/users/:uuid` - Delete user (Auth + Ownership Required)
-- `GET /api/users/:uuid/groups` - Get user's groups (Auth + Ownership Required)
-- `GET /api/users/:uuid/messages` - Get user's messages (Auth + Ownership Required)
-- `GET /api/users/profile/me` - Get current user profile (Auth Required)
-
-#### Messages
-- `GET /api/messages/group/:groupUuid` - Get messages for a group
-- `GET /api/messages/:id` - Get specific message
-- `POST /api/messages` - Create new message
-- `PUT /api/messages/:id` - Update message
-- `DELETE /api/messages/:id` - Soft delete message
-- `GET /api/messages/search/:groupUuid` - Search messages in group
-
-## Authentication Examples
-
-### 1. Create a User and Get Token
-```bash
-POST /api/users
-Body: { "name": "John Doe" }
-
-Response:
-{
-  "message": "User created successfully",
-  "data": { "uuid": "...", "name": "John Doe" },
-  "token": "jwt-token-here"
-}
-```
-
-### 2. Login and Get Token
-```bash
-POST /api/users/login
-Body: { "name": "John Doe" }
-
-Response:
-{
-  "message": "Login successful",
-  "data": { "uuid": "...", "name": "John Doe" },
-  "token": "jwt-token-here"
-}
-```
-
-### 3. Use Token for Authenticated Requests
-```bash
-GET /api/users/profile/me
-Headers: Authorization: Bearer <jwt-token>
-
-Response:
-{
-  "user": { "uuid": "...", "name": "John Doe" }
-}
-```
-
-### 4. Test Authentication
-```bash
-GET /api/test/auth-test
-Headers: Authorization: Bearer <jwt-token>
-
-Response:
-{
-  "message": "Authentication successful",
-  "user": { "uuid": "...", "name": "John Doe" }
-}
-```
-
-## Real-Time PostgreSQL Listener
-
-The application includes a PostgreSQL listener service that automatically detects changes to the messages table in real-time using PostgreSQL's `NOTIFY/LISTEN` mechanism.
-
-### Features
-
-- **Automatic Triggers**: Database triggers automatically notify on INSERT, UPDATE, and DELETE operations
-- **Real-Time Updates**: Instant notification when messages change
-- **Event-Driven Architecture**: Uses Node.js event emitter pattern
-- **Automatic Reconnection**: Handles connection failures gracefully
-- **JSON Payloads**: Rich notification data including operation type and message details
-
-### How It Works
-
-1. **Database Triggers**: PostgreSQL triggers fire on message table changes
-2. **Notifications**: Triggers send JSON payloads via `pg_notify()`
-3. **Listener Service**: Node.js service listens to the notification channel
-4. **Event Emission**: Changes are emitted as events for real-time processing
-
-### Use Cases
-
-- **WebSocket Broadcasting**: Send real-time updates to connected clients
-- **Cache Invalidation**: Automatically invalidate cached data
-- **Push Notifications**: Notify users of new messages
-- **Audit Logging**: Track all message changes
-- **Real-Time Analytics**: Monitor message activity
-
-## Setup Instructions
-
-### 1. Install Dependencies
-```bash
-npm install
-```
-
-### 2. Environment Configuration
-Create a `.env` file in the backend directory with your database connection and JWT secret:
-```env
-DATABASE_URL="postgresql://username:password@localhost:5432/chatroom_db?schema=public"
-AUTH_SECRET_KEY="your-super-secret-jwt-key-here"
-```
-
-### 3. Database Setup
-```bash
-# Generate Prisma client
-npm run db:generate
-
-# Push schema to database (creates tables and triggers)
-npm run db:push
-
-# Or use migrations for production
-npm run db:migrate
-```
-
-### 4. Start the Server
-```bash
-npm run dev
-```
-
-## Available Scripts
-
-- `npm run dev` - Start the development server
-- `npm run db:generate` - Generate Prisma client
-- `npm run db:push` - Push schema changes to database
-- `npm run db:migrate` - Create and apply database migrations
-- `npm run db:studio` - Open Prisma Studio (database GUI)
-
-## PostgreSQL Listener API
-
-### Event: `message_change`
-
-The listener emits a `message_change` event whenever a message is modified:
-
-```javascript
-const PostgresListener = require('./services/postgresListener');
-
-const listener = new PostgresListener();
-await listener.connect();
-
-listener.on('message_change', (data) => {
-  console.log('Message changed:', data);
-  // data.operation: 'INSERT', 'UPDATE', or 'DELETE'
-  // data contains all message fields and metadata
-});
-```
-
-### Example Payload
-
-```json
-{
-  "operation": "INSERT",
-  "table": "messages",
-  "id": 1,
-  "group_uuid": "uuid-here",
-  "sender_uuid": "user-uuid-here",
-  "content": "Hello, world! 👋",
-  "file": null,
-  "created_date": "2024-01-01T00:00:00.000Z",
-  "is_deleted": false
-}
-```
-
-## Examples
-
-See `examples/messageOperations.js` for complete usage examples including:
-- Basic message operations
-- WebSocket integration
-- Cache invalidation
-- Push notifications
+A modern, async chat room API built with Starlette, SQLAlchemy, and PostgreSQL.
 
 ## Features
 
-- **Modular Architecture**: Clean separation of routes, services, and middleware
-- **JWT Authentication**: Secure token-based authentication system
-- **Role-Based Access Control**: Extensible permission system
-- **Ownership Verification**: Users can only access their own resources
-- **Emoticon Support**: The `content` field uses TEXT type which supports all Unicode characters including emoticons
-- **Real-Time Updates**: PostgreSQL listener for instant change detection
-- **RESTful API**: Comprehensive message and user CRUD operations
-- **Error Handling**: Consistent error responses with proper HTTP status codes
-- **Relationships**: Proper foreign key relationships between all tables
-- **Indexes**: Performance indexes on frequently queried fields
-- **Cascade Deletes**: Automatic cleanup when users or groups are deleted
-- **Unique Constraints**: Prevents duplicate group participants and user names
-- **Timestamps**: Automatic created_date and updated_at tracking
-- **Soft Deletes**: Messages can be marked as deleted without losing data
-- **Automatic Reconnection**: Listener service handles connection failures gracefully
-- **Search Functionality**: Full-text search within group messages and user names
-- **Pagination**: Built-in pagination for large message and user lists
-- **User Management**: Complete user lifecycle management with validation
-- **Data Integrity**: Prevents deletion of users with existing data
-- **Token Refresh**: Automatic JWT token refresh before expiration
+- **ASGI Architecture**: Built on Starlette for high-performance async operations
+- **PostgreSQL Database**: Uses SQLAlchemy with async support
+- **Redis Integration**: Real-time messaging with pub/sub and caching
+- **JWT Authentication**: Secure user authentication and authorization
+- **Real-time Streaming**: Server-Sent Events (SSE) for live message updates
+- **RESTful API**: Clean, intuitive API endpoints with pagination
+- **Soft Delete**: Messages are soft-deleted for data integrity
+
+## Database Schema
+
+### Users
+- `uuid`: Unique identifier (primary key)
+- `name`: User's name (max 25 characters)
+- `created_date`: Account creation timestamp
+- `updated_at`: Last update timestamp
+
+### Groups
+- `uuid`: Unique identifier (primary key)
+- `created_date`: Group creation timestamp
+- `updated_at`: Last update timestamp
+
+### Messages
+- `id`: Auto-incrementing ID (primary key)
+- `group_uuid`: Group this message belongs to
+- `content`: Message text content
+- `file`: Optional file attachment path/URL
+- `created_date`: Message creation timestamp
+- `updated_at`: Last edit timestamp
+- `is_deleted`: Soft delete flag
+- `sender_uuid`: User who sent the message
+
+### Group Participants
+- `id`: Auto-incrementing ID (primary key)
+- `group_uuid`: Group reference
+- `user_uuid`: User reference
+- `joined_at`: When user joined the group
+
+## Installation
+
+### Prerequisites
+- Python 3.8+
+- PostgreSQL 12+
+- Redis 6+
+- pip
+
+### Setup
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd postgres-chatroom/backend
+   ```
+
+2. **Create virtual environment**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+3. **Install dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Set up environment variables**
+   ```bash
+   cp env.example .env
+   # Edit .env with your database credentials
+   ```
+
+5. **Create PostgreSQL database**
+   ```sql
+   CREATE DATABASE chatroom;
+   ```
+
+6. **Start services with Docker Compose (Recommended)**
+   ```bash
+   # Copy environment file and update credentials
+   cp env.example .env
+   # Edit .env with your secure passwords
+   
+   # Start PostgreSQL and Redis
+   docker-compose up -d
+   
+   # Or start services individually
+   docker-compose up -d postgres
+   docker-compose up -d redis
+   ```
+   
+   **Alternative: Manual setup**
+   ```bash
+   # Start Redis server
+   redis-server
+   # or using Docker
+   docker run -d -p 6379:6379 redis:6-alpine
+   
+   # Start PostgreSQL
+   docker run -d -p 5432:5432 \
+     -e POSTGRES_DB=chatroom \
+     -e POSTGRES_USER=postgres \
+     -e POSTGRES_PASSWORD=your_password \
+     postgres:15-alpine
+   ```
+
+8. **Run the application**
+   ```bash
+   python app.py
+   ```
+
+The API will be available at `http://localhost:8000`
+
+## API Endpoints
+
+### Authentication
+- `POST /auth/register` - Register a new user
+- `POST /auth/login` - Login user
+- `GET /auth/me` - Get current user info
+
+### Users
+- `GET /users` - Get all users
+- `GET /users/{uuid}` - Get specific user
+- `PUT /users/me` - Update current user
+- `DELETE /users/me` - Delete current user
+- `GET /users/{uuid}/messages` - Get user's messages
+- `GET /users/{uuid}/groups` - Get user's groups
+
+### Groups
+- `POST /groups` - Create new group
+- `GET /groups` - Get all groups
+- `GET /groups/{uuid}` - Get specific group
+- `DELETE /groups/{uuid}` - Delete group
+- `POST /groups/{uuid}/join` - Join group
+- `POST /groups/{uuid}/leave` - Leave group
+- `GET /groups/{uuid}/participants` - Get group participants
+- `GET /groups/{uuid}/messages` - Get group messages
+
+### Messages
+- `POST /messages` - Send message
+- `GET /messages` - Get messages with pagination and filtering
+- `GET /messages/search` - Search messages
+- `GET /messages/{id}` - Get specific message
+- `PUT /messages/{id}` - Edit message
+- `DELETE /messages/{id}` - Delete message
+
+### Real-time Streaming (SSE)
+- `GET /stream/group?group_uuid={uuid}` - Stream messages for specific group
+- `GET /stream/all` - Stream messages from all user's groups
+- `GET /stream/health` - Redis connection health check
+
+## Usage Examples
+
+### Register a User
+```bash
+curl -X POST http://localhost:8000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"name": "john_doe"}'
+```
+
+### Login
+```bash
+curl -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"name": "john_doe"}'
+```
+
+### Create a Group
+```bash
+curl -X POST http://localhost:8000/groups \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+### Send a Message
+```bash
+curl -X POST http://localhost:8000/messages \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "Hello, world!",
+    "group_uuid": "GROUP_UUID_HERE"
+  }'
+```
+
+### Get Messages with Pagination
+```bash
+curl "http://localhost:8000/messages?page=1&per_page=20&group_uuid=GROUP_UUID_HERE" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+### Stream Messages (SSE)
+```bash
+# Stream messages for a specific group
+curl "http://localhost:8000/stream/group?group_uuid=GROUP_UUID_HERE" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Accept: text/event-stream"
+
+# Stream messages from all groups
+curl "http://localhost:8000/stream/all" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Accept: text/event-stream"
+```
+
+## Database Migrations
+
+The application uses SQLAlchemy's `create_all()` for automatic table creation. For production use, consider using Alembic for proper database migrations.
+
+## Development
+
+### Running Tests
+```bash
+# Add pytest to requirements.txt and run:
+pytest
+```
+
+### Code Formatting
+```bash
+# Add black to requirements.txt and run:
+black .
+```
+
+### Linting
+```bash
+# Add flake8 to requirements.txt and run:
+flake8 .
+```
+
+## Docker Compose
+
+The project includes a `docker-compose.yml` file for easy development setup:
+
+### Quick Start
+```bash
+# Copy environment file
+cp env.example .env
+
+# Edit .env with your credentials
+# POSTGRES_PASSWORD=your_secure_password
+# REDIS_PASSWORD=your_redis_password
+
+# Start services
+docker-compose up -d
+
+# Check service status
+docker-compose ps
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+
+# Stop and remove volumes (WARNING: This will delete all data)
+docker-compose down -v
+```
+
+### Service Details
+- **PostgreSQL 15**: Database with persistent volume storage
+- **Redis 7**: In-memory cache with authentication
+- **Health Checks**: Both services include health monitoring
+- **Networking**: Services communicate via internal network
+- **Volumes**: Data persists between container restarts
+
+### Environment Variables
+The following environment variables are used by Docker Compose:
+- `POSTGRES_DB`: Database name
+- `POSTGRES_USER`: Database user
+- `POSTGRES_PASSWORD`: Database password
+- `POSTGRES_PORT`: External PostgreSQL port
+- `REDIS_PASSWORD`: Redis authentication password
+- `REDIS_PORT`: External Redis port
+
+## Production Deployment
+
+1. **Set production environment variables**
+   - `DEBUG=False`
+   - Strong `SECRET_KEY`
+   - Production database URL
+
+2. **Use production ASGI server**
+   ```bash
+   uvicorn app:app --host 0.0.0.0 --port 8000 --workers 4
+   ```
+
+3. **Set up reverse proxy** (Nginx/Apache)
+
+4. **Configure SSL/TLS**
+
+5. **Set up monitoring and logging**
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License.
+
+## Support
+
+For questions and support, please open an issue on GitHub.
