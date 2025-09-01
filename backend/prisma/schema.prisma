@@ -1,0 +1,72 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  uuid         String   @id @default(uuid()) @db.Uuid
+  name         String   @db.VarChar(25)
+  created_date DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  // Relations
+  messages           Message[]
+  groupParticipants  GroupParticipant[]
+
+  @@map("users")
+}
+
+model Group {
+  uuid         String   @id @default(uuid()) @db.Uuid
+  created_date DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  // Relations
+  messages           Message[]
+  groupParticipants  GroupParticipant[]
+
+  @@map("groups")
+}
+
+model Message {
+  id           Int      @id @default(autoincrement())
+  group_uuid   String   @db.Uuid
+  content      String   @db.Text // Supports emoticons and Unicode
+  file         String?  @db.VarChar(255) // Optional file attachment
+  created_date DateTime @default(now())
+  updated_at   DateTime @updatedAt
+  is_deleted   Boolean  @default(false)
+  sender_uuid  String   @db.Uuid
+
+  // Relations
+  group  Group @relation(fields: [group_uuid], references: [uuid], onDelete: Cascade)
+  sender User  @relation(fields: [sender_uuid], references: [uuid], onDelete: Cascade)
+
+  @@map("messages")
+  @@index([group_uuid])
+  @@index([sender_uuid])
+  @@index([created_date])
+}
+
+model GroupParticipant {
+  id          Int      @id @default(autoincrement())
+  group_uuid  String   @db.Uuid
+  user_uuid   String   @db.Uuid
+  joined_at   DateTime @default(now())
+
+  // Relations
+  group Group @relation(fields: [group_uuid], references: [uuid], onDelete: Cascade)
+  user  User  @relation(fields: [user_uuid], references: [uuid], onDelete: Cascade)
+
+  @@unique([group_uuid, user_uuid]) // Prevent duplicate participants
+  @@map("group_participants")
+  @@index([group_uuid])
+  @@index([user_uuid])
+}
