@@ -29,20 +29,7 @@ async def shutdown():
     await redis_client.disconnect()
     await postgres_listener.stop()
 
-# Create Starlette app
-app = Starlette(
-    debug=Config.DEBUG,
-    on_startup=[startup],
-    on_shutdown=[shutdown],
-    routes=[
-        Route("/message", message_endpoint, methods=["GET", "POST"]),
-        Route("/stream", stream_endpoint),
-    ],
-    middleware=[
-        Middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-    ]
-)
-
+# Define all endpoint functions FIRST
 async def message_endpoint(request: Request):
     """Handle GET and POST requests for messages"""
     if request.method == "GET":
@@ -175,6 +162,20 @@ async def stream_endpoint(request: Request):
             "Access-Control-Allow-Headers": "Cache-Control"
         }
     )
+
+# Create Starlette app AFTER all functions are defined
+app = Starlette(
+    debug=Config.DEBUG,
+    on_startup=[startup],
+    on_shutdown=[shutdown],
+    routes=[
+        Route("/message", message_endpoint, methods=["GET", "POST"]),
+        Route("/stream", stream_endpoint),
+    ],
+    middleware=[
+        Middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+    ]
+)
 
 if __name__ == "__main__":
     import uvicorn
