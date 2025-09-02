@@ -1,311 +1,259 @@
-# Chat Room API - Starlette ASGI Application
+# Starlette Chatroom Backend
 
-A modern, async chat room API built with Starlette, SQLAlchemy, and PostgreSQL.
+A high-performance ASGI backend application built with Starlette, featuring real-time messaging, PostgreSQL integration, and Redis pub/sub.
 
 ## Features
 
-- **ASGI Architecture**: Built on Starlette for high-performance async operations
-- **PostgreSQL Database**: Uses SQLAlchemy with async support
-- **Redis Integration**: Real-time messaging with pub/sub and caching
-- **JWT Authentication**: Secure user authentication and authorization
-- **Real-time Streaming**: Server-Sent Events (SSE) for live message updates
-- **RESTful API**: Clean, intuitive API endpoints with pagination
-- **Soft Delete**: Messages are soft-deleted for data integrity
+- **ASGI Framework**: Built with Starlette for high-performance async web applications
+- **Real-time Streaming**: Server-Sent Events (SSE) endpoint for live message updates
+- **PostgreSQL Integration**: SQLAlchemy ORM with async support
+- **Redis Pub/Sub**: Real-time message broadcasting
+- **PostgreSQL Listener**: Automatic database change notifications
+- **Cursor Pagination**: Efficient message retrieval with cursor-based pagination
+- **Multi-language Support**: Full UTF-8 support for international characters and emoticons
 
-## Database Schema
+## Architecture
 
-### Users
-- `uuid`: Unique identifier (primary key)
-- `name`: User's name (max 25 characters)
-- `created_date`: Account creation timestamp
-- `updated_at`: Last update timestamp
+```
+Client → Starlette App → PostgreSQL
+              ↓
+           Redis Pub/Sub
+              ↓
+        PostgreSQL Listener
+```
 
-### Groups
-- `uuid`: Unique identifier (primary key)
-- `created_date`: Group creation timestamp
-- `updated_at`: Last update timestamp
+## Prerequisites
 
-### Messages
-- `id`: Auto-incrementing ID (primary key)
-- `group_uuid`: Group this message belongs to
-- `content`: Message text content
-- `file`: Optional file attachment path/URL
-- `created_date`: Message creation timestamp
-- `updated_at`: Last edit timestamp
-- `is_deleted`: Soft delete flag
-- `sender_uuid`: User who sent the message
-
-### Group Participants
-- `id`: Auto-incrementing ID (primary key)
-- `group_uuid`: Group reference
-- `user_uuid`: User reference
-- `joined_at`: When user joined the group
-
-## Installation
-
-### Prerequisites
+- Docker and Docker Compose
 - Python 3.8+
-- PostgreSQL 12+
-- Redis 6+
 - pip
 
-### Setup
+## Quick Start
 
-1. **Clone the repository**
+1. **Clone and navigate to the project directory**
    ```bash
-   git clone <repository-url>
-   cd postgres-chatroom/backend
+   cd backend
    ```
 
-2. **Create virtual environment**
+2. **Set up environment configuration**
    ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   python setup_env.py
+   ```
+   This will create a `.env` file with default values. Review and modify as needed.
+
+3. **Start the services**
+   ```bash
+   docker-compose up -d
    ```
 
-3. **Install dependencies**
+4. **Install Python dependencies**
    ```bash
    pip install -r requirements.txt
    ```
 
-4. **Set up environment variables**
+5. **Run the application**
    ```bash
-   cp env.example .env
-   # Edit .env with your database credentials
+   python main.py
    ```
 
-5. **Create PostgreSQL database**
-   ```sql
-   CREATE DATABASE chatroom;
-   ```
-
-6. **Start services with Docker Compose (Recommended)**
-   ```bash
-   # Copy environment file and update credentials
-   cp env.example .env
-   # Edit .env with your secure passwords
-   
-   # Start PostgreSQL and Redis
-   docker-compose up -d
-   
-   # Or start services individually
-   docker-compose up -d postgres
-   docker-compose up -d redis
-   ```
-   
-   **Alternative: Manual setup**
-   ```bash
-   # Start Redis server
-   redis-server
-   # or using Docker
-   docker run -d -p 6379:6379 redis:6-alpine
-   
-   # Start PostgreSQL
-   docker run -d -p 5432:5432 \
-     -e POSTGRES_DB=chatroom \
-     -e POSTGRES_USER=postgres \
-     -e POSTGRES_PASSWORD=your_password \
-     postgres:15-alpine
-   ```
-
-8. **Run the application**
-   ```bash
-   python app.py
-   ```
-
-The API will be available at `http://localhost:8000`
+The application will be available at `http://localhost:8000`
 
 ## API Endpoints
 
-### Authentication
-- `POST /auth/register` - Register a new user
-- `POST /auth/login` - Login user
-- `GET /auth/me` - Get current user info
+### GET /message
+Retrieve paginated messages with cursor-based pagination.
 
-### Users
-- `GET /users` - Get all users
-- `GET /users/{uuid}` - Get specific user
-- `PUT /users/me` - Update current user
-- `DELETE /users/me` - Delete current user
-- `GET /users/{uuid}/messages` - Get user's messages
-- `GET /users/{uuid}/groups` - Get user's groups
+**Query Parameters:**
+- `cursor` (optional): ISO timestamp for pagination
+- `limit` (optional): Number of messages to return (default: 20, max: 100)
 
-### Groups
-- `POST /groups` - Create new group
-- `GET /groups` - Get all groups
-- `GET /groups/{uuid}` - Get specific group
-- `DELETE /groups/{uuid}` - Delete group
-- `POST /groups/{uuid}/join` - Join group
-- `POST /groups/{uuid}/leave` - Leave group
-- `GET /groups/{uuid}/participants` - Get group participants
-- `GET /groups/{uuid}/messages` - Get group messages
-
-### Messages
-- `POST /messages` - Send message
-- `GET /messages` - Get messages with pagination and filtering
-- `GET /messages/search` - Search messages
-- `GET /messages/{id}` - Get specific message
-- `PUT /messages/{id}` - Edit message
-- `DELETE /messages/{id}` - Delete message
-
-### Real-time Streaming (SSE)
-- `GET /stream/group?group_uuid={uuid}` - Stream messages for specific group
-- `GET /stream/all` - Stream messages from all user's groups
-- `GET /stream/health` - Redis connection health check
-
-## Usage Examples
-
-### Register a User
+**Example:**
 ```bash
-curl -X POST http://localhost:8000/auth/register \
+curl "http://localhost:8000/message?limit=10"
+```
+
+**Response:**
+```json
+{
+  "messages": [
+    {
+      "id": 1,
+      "content": "Hello, world! 👋",
+      "file": null,
+      "created_date": "2024-01-01T12:00:00Z",
+      "sender_id": "123e4567-e89b-12d3-a456-426614174000"
+    }
+  ],
+  "next_cursor": "2024-01-01T11:59:00Z",
+  "has_more": true
+}
+```
+
+### POST /message
+Create a new message.
+
+**Request Body:**
+```json
+{
+  "content": "Hello, world! 👋",
+  "file": "document.pdf",
+  "sender_id": "123e4567-e89b-12d3-a456-426614174000"
+}
+```
+
+**Example:**
+```bash
+curl -X POST "http://localhost:8000/message" \
   -H "Content-Type: application/json" \
-  -d '{"name": "john_doe"}'
+  -d '{"content": "Hello!", "sender_id": "123e4567-e89b-12d3-a456-426614174000"}'
 ```
 
-### Login
+### GET /stream
+Server-Sent Events endpoint for real-time message streaming.
+
+**Example:**
 ```bash
-curl -X POST http://localhost:8000/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"name": "john_doe"}'
+curl -N "http://localhost:8000/stream"
 ```
 
-### Create a Group
+**Response (SSE format):**
+```
+data: {"type": "connected", "message": "Connected to message stream"}
+
+data: {"type": "new_message", "data": {"operation": "INSERT", "id": 1, "content": "Hello!", ...}}
+```
+
+## Database Schema
+
+### messages table
+```sql
+CREATE TABLE messages (
+    id SERIAL PRIMARY KEY,
+    content TEXT NOT NULL,
+    file VARCHAR(50),
+    created_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    sender_id UUID NOT NULL
+);
+```
+
+**Features:**
+- `content`: TEXT field supporting unlimited length and UTF-8 characters
+- `file`: Optional file reference (max 50 characters)
+- `created_date`: Automatic timestamp with timezone
+- `sender_id`: UUID for user identification
+- Indexes on `created_date` and `sender_id` for performance
+
+## Environment Configuration
+
+The application uses environment variables for configuration. A setup script is provided to help you get started:
+
+### Automatic Setup
 ```bash
-curl -X POST http://localhost:8000/groups \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{}'
+python setup_env.py
 ```
 
-### Send a Message
+This will create a `.env` file from `env.example` with default values.
+
+### Manual Configuration
+
+Environment variables can be set in `.env` file or directly:
+
 ```bash
-curl -X POST http://localhost:8000/messages \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "content": "Hello, world!",
-    "group_uuid": "GROUP_UUID_HERE"
-  }'
+# Database
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/chatroom
+
+# Redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_DB=0
+REDIS_PASSWORD=
+
+# App
+DEBUG=True
+HOST=0.0.0.0
+PORT=8000
 ```
 
-### Get Messages with Pagination
-```bash
-curl "http://localhost:8000/messages?page=1&per_page=20&group_uuid=GROUP_UUID_HERE" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
-```
+## Real-time Features
 
-### Stream Messages (SSE)
-```bash
-# Stream messages for a specific group
-curl "http://localhost:8000/stream/group?group_uuid=GROUP_UUID_HERE" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -H "Accept: text/event-stream"
+### PostgreSQL Listener
+- Automatically monitors the `messages` table for changes
+- Creates database triggers for INSERT, UPDATE, and DELETE operations
+- Publishes changes to Redis channels:
+  - `new_messages`: New message notifications
+  - `updated_messages`: Message update notifications
+  - `deleted_messages`: Message deletion notifications
 
-# Stream messages from all groups
-curl "http://localhost:8000/stream/all" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -H "Accept: text/event-stream"
-```
-
-## Database Migrations
-
-The application uses SQLAlchemy's `create_all()` for automatic table creation. For production use, consider using Alembic for proper database migrations.
+### Redis Pub/Sub
+- Handles real-time message broadcasting
+- Supports multiple subscribers
+- Efficient message delivery
 
 ## Development
 
 ### Running Tests
 ```bash
-# Add pytest to requirements.txt and run:
+# Install test dependencies
+pip install pytest pytest-asyncio
+
+# Run tests
 pytest
 ```
 
-### Code Formatting
-```bash
-# Add black to requirements.txt and run:
-black .
+### Code Structure
+```
+├── main.py              # Main Starlette application
+├── database.py          # SQLAlchemy models and database setup
+├── redis_client.py      # Redis client with connection management
+├── postgres_listener.py # PostgreSQL change listener
+├── models.py            # Pydantic models for validation
+├── config.py            # Configuration management
+├── requirements.txt     # Python dependencies
+├── docker-compose.yml   # Docker services (Redis + PostgreSQL)
+└── init.sql            # Database initialization script
 ```
 
-### Linting
+## Performance Features
+
+- **Async/Await**: Full asynchronous support for high concurrency
+- **Connection Pooling**: Efficient database and Redis connection management
+- **Cursor Pagination**: Scalable message retrieval
+- **Indexed Queries**: Optimized database performance
+- **Streaming Responses**: Memory-efficient real-time updates
+
+## Security Considerations
+
+- CORS middleware enabled for cross-origin requests
+- Input validation with Pydantic models
+- SQL injection protection through SQLAlchemy ORM
+- UUID validation for sender identification
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Database Connection Failed**
+   - Ensure PostgreSQL container is running: `docker-compose ps`
+   - Check database credentials in `config.py`
+
+2. **Redis Connection Failed**
+   - Ensure Redis container is running: `docker-compose ps`
+   - Check Redis host/port configuration
+
+3. **Port Already in Use**
+   - Change port in `config.py` or stop conflicting services
+   - Use different ports in `docker-compose.yml`
+
+### Logs
 ```bash
-# Add flake8 to requirements.txt and run:
-flake8 .
+# View application logs
+python main.py
+
+# View Docker service logs
+docker-compose logs -f postgres
+docker-compose logs -f redis
 ```
-
-## Docker Compose
-
-The project includes a `docker-compose.yml` file for easy development setup:
-
-### Quick Start
-```bash
-# Copy environment file
-cp env.example .env
-
-# Edit .env with your credentials
-# POSTGRES_PASSWORD=your_secure_password
-# REDIS_PASSWORD=your_redis_password
-
-# Start services
-docker-compose up -d
-
-# Check service status
-docker-compose ps
-
-# View logs
-docker-compose logs -f
-
-# Stop services
-docker-compose down
-
-# Stop and remove volumes (WARNING: This will delete all data)
-docker-compose down -v
-```
-
-### Service Details
-- **PostgreSQL 15**: Database with persistent volume storage
-- **Redis 7**: In-memory cache with authentication
-- **Health Checks**: Both services include health monitoring
-- **Networking**: Services communicate via internal network
-- **Volumes**: Data persists between container restarts
-
-### Environment Variables
-The following environment variables are used by Docker Compose:
-- `POSTGRES_DB`: Database name
-- `POSTGRES_USER`: Database user
-- `POSTGRES_PASSWORD`: Database password
-- `POSTGRES_PORT`: External PostgreSQL port
-- `REDIS_PASSWORD`: Redis authentication password
-- `REDIS_PORT`: External Redis port
-
-## Production Deployment
-
-1. **Set production environment variables**
-   - `DEBUG=False`
-   - Strong `SECRET_KEY`
-   - Production database URL
-
-2. **Use production ASGI server**
-   ```bash
-   uvicorn app:app --host 0.0.0.0 --port 8000 --workers 4
-   ```
-
-3. **Set up reverse proxy** (Nginx/Apache)
-
-4. **Configure SSL/TLS**
-
-5. **Set up monitoring and logging**
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
 
 ## License
 
-This project is licensed under the MIT License.
-
-## Support
-
-For questions and support, please open an issue on GitHub.
+MIT License

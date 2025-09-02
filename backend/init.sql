@@ -1,18 +1,21 @@
--- PostgreSQL initialization script for Chat Room API
--- This script runs when the PostgreSQL container starts for the first time
+-- Create database with proper encoding for international characters and emoticons
+-- Note: Database name will be set by POSTGRES_DB environment variable
+-- This script will run after the database is created by Docker
 
--- Create database if it doesn't exist
--- Note: The database is already created by POSTGRES_DB environment variable
--- This script can be used for additional setup if needed
+-- Create messages table
+CREATE TABLE messages (
+    id SERIAL PRIMARY KEY,
+    content TEXT NOT NULL,
+    file VARCHAR(50),
+    created_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    sender_id UUID NOT NULL
+);
 
--- Create extensions if needed
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- Create index on created_date for efficient cursor pagination
+CREATE INDEX idx_messages_created_date ON messages(created_date);
 
--- You can add additional initialization commands here
--- For example, creating additional schemas, users, or initial data
+-- Create index on sender_id for efficient queries
+CREATE INDEX idx_messages_sender_id ON messages(sender_id);
 
--- Log successful initialization
-DO $$
-BEGIN
-    RAISE NOTICE 'PostgreSQL initialization completed successfully';
-END $$;
+-- Enable row level security (optional)
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
