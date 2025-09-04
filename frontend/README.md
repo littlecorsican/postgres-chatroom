@@ -1,15 +1,3 @@
-# Chat Room Application
-
-A real-time chat room built with React that connects to a backend via Server-Sent Events (SSE) and REST API.
-
-## Features
-
-- Real-time messaging using Server-Sent Events (SSE)
-- Persistent message history
-- User identification with auto-generated UUIDs
-- Responsive design for mobile and desktop
-- Connection status indicator
-- Modern, beautiful UI with smooth animations
 
 ## Setup
 
@@ -40,11 +28,9 @@ The application expects the following backend endpoints:
 Messages should follow this structure:
 ```json
 {
-  "id": "uuid",
-  "text": "message content",
-  "userName": "user's name",
-  "userId": "user's uuid",
-  "timestamp": "ISO timestamp"
+  "content": "message content",
+  "userName": "user's id in the format of uuid",
+  "file": "url of uploaded file"
 }
 ```
 
@@ -52,17 +38,4 @@ Messages should follow this structure:
 
 - `REACT_APP_CHAT_BACKEND_URL` - Backend server URL (defaults to http://localhost:3001)
 
-## Available Scripts
 
-- `npm start` - Start development server
-- `npm build` - Build for production
-- `npm test` - Run tests
-- `npm eject` - Eject from Create React App
-
-## Technologies Used
-
-- React 18
-- CSS3 with modern features
-- Server-Sent Events (SSE)
-- Fetch API
-- UUID generation
