@@ -4,10 +4,12 @@
 In this learning app i wish to test to feasibility of using postgres notify + SSE + redis to create a real time chat room app.
 
 when there is new message sent by user
-frontend --send data--> backend --write--> database
+frontend --send POST data--> backend --write--> database
 
 when database changes
-database --notify--> backend --SSE--> frontend
+database --notify--> backend --publish to redis
+
+backend --listens to redis--> receives notification -->  --SSE --> frontend
 
 
 ## Features
