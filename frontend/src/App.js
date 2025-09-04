@@ -7,7 +7,6 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [userName, setUserName] = useState('');
-  const [userId] = useState(uuidv4());
   const [isConnected, setIsConnected] = useState(false);
   const messagesEndRef = useRef(null);
   const eventSourceRef = useRef(null);
@@ -83,11 +82,9 @@ function App() {
     if (!newMessage.trim() || !userName.trim()) return;
 
     const messageData = {
-      id: uuidv4(),
-      text: newMessage,
-      userName: userName,
-      userId: userId,
-      timestamp: new Date().toISOString()
+      content: newMessage,
+      sender_id: userName,
+      //timestamp: new Date().toISOString()
     };
 
     try {
@@ -135,7 +132,7 @@ function App() {
             onChange={(e) => setUserName(e.target.value)}
             className="name-input"
           />
-          <span className="user-id">ID: {userId}</span>
+          <span className="user-id">ID: {userName} </span>
         </div>
 
         <div className="messages-container">
@@ -143,7 +140,7 @@ function App() {
             {messages.map((message, index) => (
               <div
                 key={message.id || index}
-                className={`message ${message.sender_id === userId ? 'own-message' : 'other-message'}`}
+                className={`message ${message.sender_id === userName ? 'own-message' : 'other-message'}`}
               >
                 <div className="message-header">
                   <span className="user-name">{message.sender_id || 'Anonymous'}</span>
