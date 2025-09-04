@@ -17,6 +17,9 @@ class MessageResponse(BaseModel):
     
     class Config:
         from_attributes = True
+        json_encoders = {
+            datetime: lambda v: v.isoformat() if v else None
+        }
 
 class MessageListResponse(BaseModel):
     messages: list[MessageResponse]

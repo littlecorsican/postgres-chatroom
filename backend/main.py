@@ -11,8 +11,9 @@ import asyncio
 from datetime import datetime
 import uuid
 from typing import Optional
+from sqlalchemy import select, desc
 
-from database import get_db, init_db, Message
+from database import get_db, init_db, Message, AsyncSessionLocal
 from redis_client import redis_client
 from postgres_listener import postgres_listener
 from models import MessageCreate, MessageResponse, MessageListResponse, PaginationParams
@@ -45,21 +46,22 @@ async def get_messages(request: Request):
         limit = int(request.query_params.get("limit", Config.DEFAULT_PAGE_SIZE))
         limit = min(limit, Config.MAX_PAGE_SIZE)
         
-        async with get_db() as db:
-            # Build query
-            query = db.query(Message).order_by(Message.created_date.desc())
+        # Create database session directly
+        async with AsyncSessionLocal() as db:
+            # Build query using SQLAlchemy 2.0 syntax
+            stmt = select(Message).order_by(desc(Message.created_date))
             
             if cursor:
                 try:
                     # Decode cursor (timestamp in ISO format)
                     cursor_date = datetime.fromisoformat(cursor)
-                    query = query.filter(Message.created_date < cursor_date)
+                    stmt = stmt.where(Message.created_date < cursor_date)
                 except ValueError:
                     return JSONResponse({"error": "Invalid cursor format"}, status_code=400)
             
             # Get messages with limit + 1 to check if there are more
-            messages = await db.execute(query.limit(limit + 1))
-            message_list = messages.scalars().all()
+            result = await db.execute(stmt.limit(limit + 1))
+            message_list = result.scalars().all()
             
             # Check if there are more messages
             has_more = len(message_list) > limit
@@ -88,7 +90,9 @@ async def get_messages(request: Request):
                 has_more=has_more
             )
             
-            return JSONResponse(response.dict())
+            # Convert to dict with proper datetime handling
+            response_dict = response.model_dump(mode='json')
+            return JSONResponse(response_dict)
             
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -100,19 +104,23 @@ async def create_message(request: Request):
         body = await request.json()
         message_data = MessageCreate(**body)
         
-        async with get_db() as db:
+        # Create database session directly
+        async with AsyncSessionLocal() as db:
             # Create new message
             new_message = Message(
                 content=message_data.content,
                 file=message_data.file,
                 sender_id=message_data.sender_id
             )
+
+            print("new_message", new_message)
             
             db.add(new_message)
             await db.commit()
             await db.refresh(new_message)
             
             # Create response
+            print("asdfasfsf")
             response = MessageResponse(
                 id=new_message.id,
                 content=new_message.content,
@@ -120,8 +128,11 @@ async def create_message(request: Request):
                 created_date=new_message.created_date,
                 sender_id=new_message.sender_id
             )
+            print("asdfasfsf1111", response)
             
-            return JSONResponse(response.dict(), status_code=201)
+            # Convert to dict with proper datetime handling
+            response_dict = response.model_dump(mode='json')
+            return JSONResponse(response_dict, status_code=201)
             
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -169,8 +180,8 @@ app = Starlette(
     on_startup=[startup],
     on_shutdown=[shutdown],
     routes=[
-        Route("/message", message_endpoint, methods=["GET", "POST"]),
-        Route("/stream", stream_endpoint),
+        Route("/api/message", message_endpoint, methods=["GET", "POST"]),
+        Route("/api/stream", stream_endpoint),
     ],
     middleware=[
         Middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
