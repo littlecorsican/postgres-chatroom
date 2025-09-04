@@ -11,7 +11,7 @@ import asyncio
 from datetime import datetime
 import uuid
 from typing import Optional
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, asc
 
 from database import get_db, init_db, Message, AsyncSessionLocal
 from redis_client import redis_client
@@ -49,7 +49,7 @@ async def get_messages(request: Request):
         # Create database session directly
         async with AsyncSessionLocal() as db:
             # Build query using SQLAlchemy 2.0 syntax
-            stmt = select(Message).order_by(desc(Message.created_date))
+            stmt = select(Message).order_by(asc(Message.created_date))
             
             if cursor:
                 try:

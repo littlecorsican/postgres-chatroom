@@ -27,7 +27,7 @@ function App() {
         const response = await fetch(API_ENDPOINTS.MESSAGES);
         if (response.ok) {
           const data = await response.json();
-          setMessages(data);
+          setMessages(data.messages);
         }
       } catch (error) {
         console.error('Error loading old messages:', error);
@@ -47,7 +47,10 @@ function App() {
         eventSourceRef.current.onmessage = (event) => {
           try {
             const message = JSON.parse(event.data);
-            setMessages(prev => [...prev, message]);
+            const type = message.type
+            if (type == "new_message") {
+              setMessages(prev => [...prev, message.data]);
+            }
           } catch (error) {
             console.error('Error parsing SSE message:', error);
           }
@@ -140,15 +143,15 @@ function App() {
             {messages.map((message, index) => (
               <div
                 key={message.id || index}
-                className={`message ${message.userId === userId ? 'own-message' : 'other-message'}`}
+                className={`message ${message.sender_id === userId ? 'own-message' : 'other-message'}`}
               >
                 <div className="message-header">
-                  <span className="user-name">{message.userName || 'Anonymous'}</span>
+                  <span className="user-name">{message.sender_id || 'Anonymous'}</span>
                   <span className="timestamp">
-                    {new Date(message.timestamp).toLocaleTimeString()}
+                    {new Date(message.created_date).toLocaleTimeString()}
                   </span>
                 </div>
-                <div className="message-text">{message.text}</div>
+                <div className="message-text">{message.content}</div>
               </div>
             ))}
             <div ref={messagesEndRef} />
